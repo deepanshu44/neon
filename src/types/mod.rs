@@ -93,7 +93,7 @@ use self::internal::ValueInternal;
 use self::utf8::Utf8;
 use crate::context::internal::Env;
 use crate::context::{Context, FunctionContext};
-use crate::handle::internal::SuperType;
+use crate::handle::internal::{SuperType, TransparentWrapper};
 use crate::handle::{Handle, Managed};
 use crate::object::{Object, This};
 use crate::result::{JsResult, JsResultExt, NeonResult, Throw};
@@ -131,40 +131,48 @@ pub(crate) fn build<'a, T: Managed, F: FnOnce(&mut raw::Local) -> bool>(
 }
 
 impl<T: Value> SuperType<T> for JsValue {
-    fn upcast_internal(v: T) -> JsValue {
+    fn upcast_internal(v: &T) -> JsValue {
         JsValue(v.to_raw())
     }
 }
 
 impl<T: Object> SuperType<T> for JsObject {
-    fn upcast_internal(v: T) -> JsObject {
+    fn upcast_internal(v: &T) -> JsObject {
         JsObject(v.to_raw())
     }
 }
 
 /// The trait shared by all JavaScript values.
 pub trait Value: ValueInternal {
-    fn to_string<'a, C: Context<'a>>(self, cx: &mut C) -> JsResult<'a, JsString> {
+    fn to_string<'a, C: Context<'a>>(&self, cx: &mut C) -> JsResult<'a, JsString> {
         let env = cx.env();
         build(env, |out| unsafe {
             neon_runtime::convert::to_string(out, env.to_raw(), self.to_raw())
         })
     }
 
-    fn as_value<'a, C: Context<'a>>(self, _: &mut C) -> Handle<'a, JsValue> {
+    fn as_value<'a, C: Context<'a>>(&self, _: &mut C) -> Handle<'a, JsValue> {
         JsValue::new_internal(self.to_raw())
     }
 }
 
 /// A JavaScript value of any type.
-#[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Debug)]
+#[repr(transparent)]
 pub struct JsValue(raw::Local);
 
 impl Value for JsValue {}
 
+unsafe impl TransparentWrapper for JsValue {
+    type Inner = raw::Local;
+
+    fn into_inner(self) -> Self::Inner {
+        self.0
+    }
+}
+
 impl Managed for JsValue {
-    fn to_raw(self) -> raw::Local {
+    fn to_raw(&self) -> raw::Local {
         self.0
     }
 
@@ -178,7 +186,7 @@ impl ValueInternal for JsValue {
         "any".to_string()
     }
 
-    fn is_typeof<Other: Value>(_env: Env, _other: Other) -> bool {
+    fn is_typeof<Other: Value>(_env: Env, _other: &Other) -> bool {
         true
     }
 }
@@ -202,8 +210,8 @@ impl JsValue {
 }
 
 /// The JavaScript `undefined` value.
-#[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Debug)]
+#[repr(transparent)]
 pub struct JsUndefined(raw::Local);
 
 impl JsUndefined {
@@ -237,8 +245,16 @@ impl JsUndefined {
 
 impl Value for JsUndefined {}
 
+unsafe impl TransparentWrapper for JsUndefined {
+    type Inner = raw::Local;
+
+    fn into_inner(self) -> Self::Inner {
+        self.0
+    }
+}
+
 impl Managed for JsUndefined {
-    fn to_raw(self) -> raw::Local {
+    fn to_raw(&self) -> raw::Local {
         self.0
     }
 
@@ -264,14 +280,14 @@ impl ValueInternal for JsUndefined {
         "undefined".to_string()
     }
 
-    fn is_typeof<Other: Value>(env: Env, other: Other) -> bool {
+    fn is_typeof<Other: Value>(env: Env, other: &Other) -> bool {
         unsafe { neon_runtime::tag::is_undefined(env.to_raw(), other.to_raw()) }
     }
 }
 
 /// The JavaScript `null` value.
-#[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Debug)]
+#[repr(transparent)]
 pub struct JsNull(raw::Local);
 
 impl JsNull {
@@ -296,8 +312,16 @@ impl JsNull {
 
 impl Value for JsNull {}
 
+unsafe impl TransparentWrapper for JsNull {
+    type Inner = raw::Local;
+
+    fn into_inner(self) -> Self::Inner {
+        self.0
+    }
+}
+
 impl Managed for JsNull {
-    fn to_raw(self) -> raw::Local {
+    fn to_raw(&self) -> raw::Local {
         self.0
     }
 
@@ -311,14 +335,14 @@ impl ValueInternal for JsNull {
         "null".to_string()
     }
 
-    fn is_typeof<Other: Value>(env: Env, other: Other) -> bool {
+    fn is_typeof<Other: Value>(env: Env, other: &Other) -> bool {
         unsafe { neon_runtime::tag::is_null(env.to_raw(), other.to_raw()) }
     }
 }
 
 /// A JavaScript boolean primitive value.
-#[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Debug)]
+#[repr(transparent)]
 pub struct JsBoolean(raw::Local);
 
 impl JsBoolean {
@@ -335,12 +359,12 @@ impl JsBoolean {
     }
 
     #[cfg(feature = "legacy-runtime")]
-    pub fn value(self) -> bool {
+    pub fn value(&self) -> bool {
         unsafe { neon_runtime::primitive::boolean_value(self.to_raw()) }
     }
 
     #[cfg(feature = "napi-1")]
-    pub fn value<'a, C: Context<'a>>(self, cx: &mut C) -> bool {
+    pub fn value<'a, C: Context<'a>>(&self, cx: &mut C) -> bool {
         let env = cx.env().to_raw();
         unsafe { neon_runtime::primitive::boolean_value(env, self.to_raw()) }
     }
@@ -348,8 +372,16 @@ impl JsBoolean {
 
 impl Value for JsBoolean {}
 
+unsafe impl TransparentWrapper for JsBoolean {
+    type Inner = raw::Local;
+
+    fn into_inner(self) -> Self::Inner {
+        self.0
+    }
+}
+
 impl Managed for JsBoolean {
-    fn to_raw(self) -> raw::Local {
+    fn to_raw(&self) -> raw::Local {
         self.0
     }
 
@@ -363,14 +395,14 @@ impl ValueInternal for JsBoolean {
         "boolean".to_string()
     }
 
-    fn is_typeof<Other: Value>(env: Env, other: Other) -> bool {
+    fn is_typeof<Other: Value>(env: Env, other: &Other) -> bool {
         unsafe { neon_runtime::tag::is_boolean(env.to_raw(), other.to_raw()) }
     }
 }
 
 /// A JavaScript string primitive value.
-#[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Debug)]
+#[repr(transparent)]
 pub struct JsString(raw::Local);
 
 /// An error produced when constructing a string that exceeds the JS engine's maximum string size.
@@ -397,8 +429,16 @@ impl<'a> JsResultExt<'a, JsString> for StringResult<'a> {
 
 impl Value for JsString {}
 
+unsafe impl TransparentWrapper for JsString {
+    type Inner = raw::Local;
+
+    fn into_inner(self) -> Self::Inner {
+        self.0
+    }
+}
+
 impl Managed for JsString {
-    fn to_raw(self) -> raw::Local {
+    fn to_raw(&self) -> raw::Local {
         self.0
     }
 
@@ -412,26 +452,26 @@ impl ValueInternal for JsString {
         "string".to_string()
     }
 
-    fn is_typeof<Other: Value>(env: Env, other: Other) -> bool {
+    fn is_typeof<Other: Value>(env: Env, other: &Other) -> bool {
         unsafe { neon_runtime::tag::is_string(env.to_raw(), other.to_raw()) }
     }
 }
 
 impl JsString {
     #[cfg(feature = "legacy-runtime")]
-    pub fn size(self) -> isize {
+    pub fn size(&self) -> isize {
         unsafe { neon_runtime::string::utf8_len(self.to_raw()) }
     }
 
     #[cfg(feature = "napi-1")]
-    pub fn size<'a, C: Context<'a>>(self, cx: &mut C) -> isize {
+    pub fn size<'a, C: Context<'a>>(&self, cx: &mut C) -> isize {
         let env = cx.env().to_raw();
 
         unsafe { neon_runtime::string::utf8_len(env, self.to_raw()) }
     }
 
     #[cfg(feature = "legacy-runtime")]
-    pub fn value(self) -> String {
+    pub fn value(&self) -> String {
         unsafe {
             let capacity = neon_runtime::string::utf8_len(self.to_raw());
             let mut buffer: Vec<u8> = Vec::with_capacity(capacity as usize);
@@ -443,7 +483,7 @@ impl JsString {
     }
 
     #[cfg(feature = "napi-1")]
-    pub fn value<'a, C: Context<'a>>(self, cx: &mut C) -> String {
+    pub fn value<'a, C: Context<'a>>(&self, cx: &mut C) -> String {
         let env = cx.env().to_raw();
 
         unsafe {
@@ -487,8 +527,8 @@ impl JsString {
 }
 
 /// A JavaScript number value.
-#[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Debug)]
+#[repr(transparent)]
 pub struct JsNumber(raw::Local);
 
 impl JsNumber {
@@ -505,12 +545,12 @@ impl JsNumber {
     }
 
     #[cfg(feature = "legacy-runtime")]
-    pub fn value(self) -> f64 {
+    pub fn value(&self) -> f64 {
         unsafe { neon_runtime::primitive::number_value(self.to_raw()) }
     }
 
     #[cfg(feature = "napi-1")]
-    pub fn value<'a, C: Context<'a>>(self, cx: &mut C) -> f64 {
+    pub fn value<'a, C: Context<'a>>(&self, cx: &mut C) -> f64 {
         let env = cx.env().to_raw();
         unsafe { neon_runtime::primitive::number_value(env, self.to_raw()) }
     }
@@ -518,8 +558,16 @@ impl JsNumber {
 
 impl Value for JsNumber {}
 
+unsafe impl TransparentWrapper for JsNumber {
+    type Inner = raw::Local;
+
+    fn into_inner(self) -> Self::Inner {
+        self.0
+    }
+}
+
 impl Managed for JsNumber {
-    fn to_raw(self) -> raw::Local {
+    fn to_raw(&self) -> raw::Local {
         self.0
     }
 
@@ -533,20 +581,28 @@ impl ValueInternal for JsNumber {
         "number".to_string()
     }
 
-    fn is_typeof<Other: Value>(env: Env, other: Other) -> bool {
+    fn is_typeof<Other: Value>(env: Env, other: &Other) -> bool {
         unsafe { neon_runtime::tag::is_number(env.to_raw(), other.to_raw()) }
     }
 }
 
 /// A JavaScript object.
-#[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Debug)]
+#[repr(transparent)]
 pub struct JsObject(raw::Local);
 
 impl Value for JsObject {}
 
+unsafe impl TransparentWrapper for JsObject {
+    type Inner = raw::Local;
+
+    fn into_inner(self) -> Self::Inner {
+        self.0
+    }
+}
+
 impl Managed for JsObject {
-    fn to_raw(self) -> raw::Local {
+    fn to_raw(&self) -> raw::Local {
         self.0
     }
 
@@ -572,7 +628,7 @@ impl ValueInternal for JsObject {
         "object".to_string()
     }
 
-    fn is_typeof<Other: Value>(env: Env, other: Other) -> bool {
+    fn is_typeof<Other: Value>(env: Env, other: &Other) -> bool {
         unsafe { neon_runtime::tag::is_object(env.to_raw(), other.to_raw()) }
     }
 }
@@ -599,8 +655,8 @@ impl JsObject {
 
 /// A JavaScript array object, i.e. a value for which `Array.isArray`
 /// would return `true`.
-#[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Debug)]
+#[repr(transparent)]
 pub struct JsArray(raw::Local);
 
 impl JsArray {
@@ -616,7 +672,7 @@ impl JsArray {
         }
     }
 
-    pub fn to_vec<'a, C: Context<'a>>(self, cx: &mut C) -> NeonResult<Vec<Handle<'a, JsValue>>> {
+    pub fn to_vec<'a, C: Context<'a>>(&self, cx: &mut C) -> NeonResult<Vec<Handle<'a, JsValue>>> {
         let mut result = Vec::with_capacity(self.len_inner(cx.env()) as usize);
         let mut i = 0;
         loop {
@@ -630,35 +686,43 @@ impl JsArray {
         }
     }
 
-    fn len_inner(self, env: Env) -> u32 {
+    fn len_inner(&self, env: Env) -> u32 {
         unsafe { neon_runtime::array::len(env.to_raw(), self.to_raw()) }
     }
 
     #[cfg(feature = "legacy-runtime")]
-    pub fn len(self) -> u32 {
+    pub fn len(&self) -> u32 {
         self.len_inner(Env::current())
     }
 
     #[cfg(feature = "napi-1")]
-    pub fn len<'a, C: Context<'a>>(self, cx: &mut C) -> u32 {
+    pub fn len<'a, C: Context<'a>>(&self, cx: &mut C) -> u32 {
         self.len_inner(cx.env())
     }
 
     #[cfg(feature = "legacy-runtime")]
-    pub fn is_empty(self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
     #[cfg(feature = "napi-1")]
-    pub fn is_empty<'a, C: Context<'a>>(self, cx: &mut C) -> bool {
+    pub fn is_empty<'a, C: Context<'a>>(&self, cx: &mut C) -> bool {
         self.len(cx) == 0
     }
 }
 
 impl Value for JsArray {}
 
+unsafe impl TransparentWrapper for JsArray {
+    type Inner = raw::Local;
+
+    fn into_inner(self) -> Self::Inner {
+        self.0
+    }
+}
+
 impl Managed for JsArray {
-    fn to_raw(self) -> raw::Local {
+    fn to_raw(&self) -> raw::Local {
         self.0
     }
 
@@ -672,7 +736,7 @@ impl ValueInternal for JsArray {
         "Array".to_string()
     }
 
-    fn is_typeof<Other: Value>(env: Env, other: Other) -> bool {
+    fn is_typeof<Other: Value>(env: Env, other: &Other) -> bool {
         unsafe { neon_runtime::tag::is_array(env.to_raw(), other.to_raw()) }
     }
 }
@@ -680,8 +744,8 @@ impl ValueInternal for JsArray {
 impl Object for JsArray {}
 
 /// A JavaScript function object.
-#[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Debug)]
+#[repr(transparent)]
 pub struct JsFunction<T: Object = JsObject> {
     raw: raw::Local,
     marker: PhantomData<T>,
@@ -795,7 +859,7 @@ impl JsFunction {
 
 impl<CL: Object> JsFunction<CL> {
     pub fn call<'a, 'b, C: Context<'a>, T, AS>(
-        self,
+        &self,
         cx: &mut C,
         this: Handle<'b, T>,
         args: AS,
@@ -811,7 +875,7 @@ impl<CL: Object> JsFunction<CL> {
         })
     }
 
-    pub fn construct<'a, 'b, C: Context<'a>, AS>(self, cx: &mut C, args: AS) -> JsResult<'a, CL>
+    pub fn construct<'a, 'b, C: Context<'a>, AS>(&self, cx: &mut C, args: AS) -> JsResult<'a, CL>
     where
         AS: AsRef<[Handle<'b, JsValue>]>,
     {
@@ -825,8 +889,16 @@ impl<CL: Object> JsFunction<CL> {
 
 impl<T: Object> Value for JsFunction<T> {}
 
+unsafe impl<T: Object> TransparentWrapper for JsFunction<T> {
+    type Inner = raw::Local;
+
+    fn into_inner(self) -> Self::Inner {
+        self.raw
+    }
+}
+
 impl<T: Object> Managed for JsFunction<T> {
-    fn to_raw(self) -> raw::Local {
+    fn to_raw(&self) -> raw::Local {
         self.raw
     }
 
@@ -843,7 +915,7 @@ impl<T: Object> ValueInternal for JsFunction<T> {
         "function".to_string()
     }
 
-    fn is_typeof<Other: Value>(env: Env, other: Other) -> bool {
+    fn is_typeof<Other: Value>(env: Env, other: &Other) -> bool {
         unsafe { neon_runtime::tag::is_function(env.to_raw(), other.to_raw()) }
     }
 }

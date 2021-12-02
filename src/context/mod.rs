@@ -714,7 +714,7 @@ impl<'a> ModuleContext<'a> {
         f: fn(FunctionContext) -> JsResult<T>,
     ) -> NeonResult<()> {
         let value = JsFunction::new(self, f)?.upcast::<JsValue>();
-        self.exports.set(self, key, value)?;
+        self.exports.clone().set(self, key, value)?;
         Ok(())
     }
 
@@ -726,7 +726,7 @@ impl<'a> ModuleContext<'a> {
         V: Value,
     {
         let value = JsFunction::new(self, f)?.upcast::<JsValue>();
-        self.exports.set(self, key, value)?;
+        self.exports.clone().set(self, key, value)?;
         Ok(())
     }
 
@@ -734,13 +734,13 @@ impl<'a> ModuleContext<'a> {
     /// Convenience method for exporting a Neon class constructor from a module.
     pub fn export_class<T: Class>(&mut self, key: &str) -> NeonResult<()> {
         let constructor = T::constructor(self)?;
-        self.exports.set(self, key, constructor)?;
+        self.exports.clone().set(self, key, constructor)?;
         Ok(())
     }
 
     /// Exports a JavaScript value from a Neon module.
     pub fn export_value<T: Value>(&mut self, key: &str, val: Handle<T>) -> NeonResult<()> {
-        self.exports.set(self, key, val)?;
+        self.exports.clone().set(self, key, val)?;
         Ok(())
     }
 

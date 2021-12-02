@@ -91,14 +91,14 @@ mod traits {
     /// The trait of all object types.
     pub trait Object: Value {
         fn get<'a, C: Context<'a>, K: PropertyKey>(
-            self,
+            &self,
             cx: &mut C,
             key: K,
         ) -> NeonResult<Handle<'a, JsValue>> {
             build(cx.env(), |out| unsafe { key.get_from(out, self.to_raw()) })
         }
 
-        fn get_own_property_names<'a, C: Context<'a>>(self, cx: &mut C) -> JsResult<'a, JsArray> {
+        fn get_own_property_names<'a, C: Context<'a>>(&self, cx: &mut C) -> JsResult<'a, JsArray> {
             let env = cx.env();
             build(env, |out| unsafe {
                 neon_runtime::object::get_own_property_names(out, env.to_raw(), self.to_raw())
@@ -106,7 +106,7 @@ mod traits {
         }
 
         fn set<'a, C: Context<'a>, K: PropertyKey, W: Value>(
-            self,
+            &self,
             _: &mut C,
             key: K,
             val: Handle<W>,
@@ -236,7 +236,7 @@ mod traits {
     /// The trait of all object types.
     pub trait Object: Value {
         fn get<'a, C: Context<'a>, K: PropertyKey>(
-            self,
+            &self,
             cx: &mut C,
             key: K,
         ) -> NeonResult<Handle<'a, JsValue>> {
@@ -247,7 +247,7 @@ mod traits {
 
         #[cfg(feature = "napi-6")]
         #[cfg_attr(docsrs, doc(cfg(feature = "napi-6")))]
-        fn get_own_property_names<'a, C: Context<'a>>(self, cx: &mut C) -> JsResult<'a, JsArray> {
+        fn get_own_property_names<'a, C: Context<'a>>(&self, cx: &mut C) -> JsResult<'a, JsArray> {
             let env = cx.env();
 
             build(cx.env(), |out| unsafe {
@@ -256,7 +256,7 @@ mod traits {
         }
 
         fn set<'a, C: Context<'a>, K: PropertyKey, W: Value>(
-            self,
+            &self,
             cx: &mut C,
             key: K,
             val: Handle<W>,
